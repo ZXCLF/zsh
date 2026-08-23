@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# 描述：智能 pacman 包装器，自动判断是否需要 sudo
+# 用法：smart-pacman [pacman 参数]
+
+
+_pacman_is_read_only() {
+    [[ $# -eq 0 ]] && return 0
+    local op_mode=""
+    local arg letters i c
+    for arg in "$@"; do
+        if [[ "$arg" =~ ^-[A-Za-z] && ! "$arg" =~ ^-- ]]; then
+            letters="${arg#-}"
+            for ((i=0; i<${#letters}; i++)); do
+                c="${letters:$i:1}"
+                case "$c" in
+                    D|F|Q|R|S|T|U|V|h) op_mode="$c"; break 2 ;;
+                esac
+            done
+        fi
+    done
+
+    [[ -z "$op_mode" ]] && return 0
+
+    case "$op_mode" in
+        Q|F|T|V|h) return 0 ;;
+        D)
+            local has_print=false is_write=false
+            for arg in "$@"; do
+                case "$arg" in
+                    --print|--print-format*) has_print=true ;;
+                    --asdeps|--asexplicit)   is_write=true ;;
+                esac
+                if [[ "$arg" =~ ^-[A-Za-z] && ! "$arg" =~ ^-- ]]; then
+                    [[ "$arg" =~ p ]] && has_print=true
+                fi
+            done
+            $has_print && return 0
+            $is_write  && return 1
+            return 0
+            ;;
+        R)
+            for arg in "$@"; do
+                case "$arg" in
+                    --print|--print-format*) return 0 ;;
+                esac
+                if [[ "$arg" =~ ^-[A-Za-z] && ! "$arg" =~ ^-- ]]; then
+                    [[ "$arg" =~ p ]] && return 0
+                fi
+            done
+            return 1
+            ;;
+        U)
+            for arg in "$@"; do
+                case "$arg" in
+                    --print|--print-format*|--downloadonly) return 0 ;;
+                esac
+                if [[ "$arg" =~ ^-[A-Za-z] && ! "$arg" =~ ^-- ]]; then
+                    [[ "$arg" =~ [pw] ]] && return 0
+                fi
+            done
+            return 1
+            ;;
+        S)
+            for arg in "$@"; do
+                case "$arg" in
+                    --print|--print-format*) return 0 ;;
+                esac
+                if [[ "$arg" =~ ^-[A-Za-z] && ! "$arg" =~ ^-- ]]; then
+                    [[ "$arg" =~ p ]] && return 0
+                fi
+            done
+
+            local -a flat=()
+            local flat_letters j
+            for arg in "$@"; do
+                if [[ "$arg" =~ ^-[A-Za-z]+$ ]]; then
+                    flat_letters="${arg#-}"
+                    for ((j=0; j<${#flat_letters}; j++)); do
+                        flat+=("-${flat_letters:$j:1}")
+                    done
+                else
+                    flat+=("$arg")
+                fi
+            done
+
+            local has_write_short=false
+            local found_target=false
+            local only_readonly_short=false
+            local only_readonly_long=false
+            local a
+            for a in "${flat[@]}"; do
+                case "$a" in
+                    -s|-i|-w) only_readonly_short=true; break ;;
+                    -y|-u|-c) has_write_short=true ;;
+                    --search|--search=*|--info|--info=*|--list|--groups|--downloadonly)
+                        only_readonly_long=true; break ;;
+                    -S) ;;
+                    -[DdFfQqRrTtUuVv] | -[a-zA-Z] ) ;;
+                    *) found_target=true ;;
+                esac
+            done
+
+            if $only_readonly_short || $only_readonly_long; then
+                return 0
+            fi
+            if $has_write_short || $found_target; then
+                return 1
+            fi
+            return 0
+            ;;
+    esac
+    return 0
+}
+
+if _pacman_is_read_only "$@"; then
+    command pacman "$@"
+elif [[ $EUID -ne 0 ]]; then
+    if command -v sudo &>/dev/null; then
+        sudo pacman "$@"
+    else
+        echo "错误: 需要 root 权限，但 sudo 不可用" >&2
+        exit 1
+    fi
+else
+    command pacman "$@"
+fi

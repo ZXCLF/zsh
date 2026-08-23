@@ -1,0 +1,15 @@
+# Zsh 编译文件
+*.zwc
+.zcompdump*
+
+# 由插件管理器自动安装
+plugins/
+
+# 本地机器覆盖配置
+local.zsh
+
+# macOS 元数据
+.DS_Store
+
+# 已安装的插件
+./plugins/

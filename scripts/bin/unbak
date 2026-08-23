@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# 描述：恢复 .bak 备份
+# 用法：unbak <文件.bak...>
+
+
+if [ $# -eq 0 ]; then
+    echo "用法: unbak <文件.bak>..." >&2
+    exit 1
+fi
+
+for file in "$@"; do
+    if [ ! -f "$file" ]; then
+        echo "警告: $file 不存在，跳过" >&2
+        continue
+    fi
+    if [[ "$file" != *.bak ]]; then
+        echo "警告: $file 不是 .bak 文件，跳过" >&2
+        continue
+    fi
+    original="${file%.bak}"
+    if [ -f "$original" ]; then
+        echo "警告: $original 已存在，跳过恢复" >&2
+        continue
+    fi
+    mv "$file" "$original"
+    echo "已恢复: $original"
+done

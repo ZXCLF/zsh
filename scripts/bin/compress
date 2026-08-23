@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# 描述：根据扩展名自动压缩
+# 用法：compress [-o 输出目录] <压缩包名> <文件或目录...>
+
+set -euo pipefail
+
+# 显示用法
+usage() {
+    cat << 'EOF' >&2
+用法: compress [-o 输出目录] <压缩包名> <文件或目录...>
+
+选项:
+  -o <目录>    指定压缩包的输出目录（默认为当前目录）
+
+示例:
+  compress archive.tar.gz myfolder
+  compress -o /tmp/backups archive.zip file1 file2
+  compress -o ~/archives backup.tar.gz /path/to/source
+EOF
+    exit 1
+}
+
+# 解析选项
+output_dir="."
+while getopts ":o:h" opt; do
+    case "$opt" in
+        o)
+            output_dir="$OPTARG"
+            ;;
+        h)
+            usage
+            ;;
+        \?)
+            echo "错误: 无效选项 -$OPTARG" >&2
+            usage
+            ;;
+        :)
+            echo "错误: 选项 -$OPTARG 需要参数" >&2
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+# 检查剩余参数
+if [ $# -lt 2 ]; then
+    echo "错误: 需要指定压缩包名和至少一个文件/目录" >&2
+    usage
+fi
+
+archive="$1"
+shift
+
+# 确保输出目录存在
+if [ ! -d "$output_dir" ]; then
+    echo "错误: 输出目录不存在: $output_dir" >&2
+    exit 1
+fi
+
+# 解析为绝对路径
+output_dir=$(cd "$output_dir" && pwd)
+archive_path="$output_dir/$(basename "$archive")"
+
+# 检查源文件/目录是否存在，并检测自引用问题
+declare -a sources=()
+for item in "$@"; do
+    if [ ! -e "$item" ]; then
+        echo "错误: 文件或目录不存在: $item" >&2
+        exit 1
+    fi
+
+    # 获取源文件的绝对路径
+    if [ -d "$item" ]; then
+        abs_item=$(cd "$item" && pwd)
+    else
+        abs_item=$(cd "$(dirname "$item")" 2>/dev/null && pwd)/$(basename "$item")
+    fi
+
+    # 检查是否会包含压缩包自身
+    if [ "$abs_item" = "$archive_path" ]; then
+        echo "错误: 不能将压缩包作为压缩源: $archive_path" >&2
+        echo "提示: 请将压缩包输出到其他目录，或指定不同的压缩包名称" >&2
+        exit 1
+    fi
+
+    # 检查目录是否包含压缩包
+    if [ -d "$item" ]; then
+        if [[ "$archive_path" == "$abs_item"/* ]]; then
+            echo "错误: 压缩包将位于要压缩的目录内，会导致递归包含" >&2
+            echo "  压缩包路径: $archive_path" >&2
+            echo "  源目录:     $abs_item" >&2
+            echo "提示: 请使用 -o 选项将压缩包输出到其他目录" >&2
+            echo "  例如: compress -o /tmp $archive $item" >&2
+            exit 1
+        fi
+    fi
+
+    sources+=("$item")
+done
+
+# 单文件压缩辅助函数
+single_file_compress() {
+    local cmd="$1"
+    local archive="$2"
+    local source="$3"
+    local format_name="$4"
+
+    if [ -d "$source" ]; then
+        echo "错误: $format_name 不能直接压缩目录，请使用 tar.$format_name" >&2
+        exit 1
+    fi
+
+    if [ $# -ne 4 ]; then
+        echo "错误: $format_name 只能压缩单个文件" >&2
+        exit 1
+    fi
+    $cmd -c "$source" > "$archive"
+}
+
+# 检查命令是否存在的辅助函数
+check_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        echo "错误: 需要安装 $1" >&2
+        exit 1
+    fi
+}
+
+lower=$(echo "$archive" | tr '[:upper:]' '[:lower:]')
+
+case "$lower" in
+    *.tar)
+        tar cf "$archive_path" "${sources[@]}"
+        ;;
+    *.tar.gz|*.tgz)
+        tar czf "$archive_path" "${sources[@]}"
+        ;;
+    *.tar.bz2|*.tbz2)
+        tar cjf "$archive_path" "${sources[@]}"
+        ;;
+    *.tar.xz|*.txz)
+        tar cJf "$archive_path" "${sources[@]}"
+        ;;
+    *.tar.zst)
+        check_command zstd
+        tar --zstd -cf "$archive_path" "${sources[@]}"
+        ;;
+    *.zip)
+        check_command zip
+        zip -r "$archive_path" "${sources[@]}"
+        ;;
+    *.7z)
+        check_command 7z
+        7z a "$archive_path" "${sources[@]}"
+        ;;
+    *.rar)
+        check_command rar
+        rar a "$archive_path" "${sources[@]}"
+        ;;
+    *.gz) single_file_compress gzip "$archive_path" "${sources[0]}" "gzip" ;;
+    *.bz2) single_file_compress bzip2 "$archive_path" "${sources[0]}" "bzip2" ;;
+    *.xz) single_file_compress xz "$archive_path" "${sources[0]}" "xz" ;;
+    *.zst)
+        check_command zstd
+        single_file_compress zstd "$archive_path" "${sources[0]}" "zstd"
+        ;;
+    *)
+        echo "错误: 不支持的压缩格式: $archive" >&2
+        echo "支持: tar, tar.gz/tgz, tar.bz2/tbz2, tar.xz/txz, tar.zst, zip, 7z, rar, gz, bz2, xz, zst" >&2
+        exit 1
+        ;;
+esac
+
+# 检查压缩是否成功
+if [ $? -eq 0 ] && [ -f "$archive_path" ]; then
+    echo "成功创建: $archive_path"
+else
+    echo "压缩失败" >&2
+    exit 1
+fi

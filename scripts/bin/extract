@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# 描述：根据扩展名自动解压文件
+# 用法：extract <文件> [目标目录]
+
+set -euo pipefail
+
+# 显示使用帮助
+show_help() {
+    cat << EOF
+用法: extract <文件> [目标目录]
+
+根据扩展名自动解压文件。
+如果未指定目标目录，将创建与压缩包同名的文件夹进行解压。
+
+参数:
+  文件        要解压的压缩文件
+  目标目录    可选，指定解压的目标目录
+
+示例:
+  extract archive.zip              # 解压到 archive/ 目录
+  extract archive.tar.gz           # 解压到 archive/ 目录
+  extract archive.rar /tmp/output  # 解压到 /tmp/output 目录
+EOF
+}
+
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+    show_help >&2
+    exit 1
+fi
+
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_help
+    exit 0
+fi
+
+if [ ! -f "$1" ]; then
+    echo "错误: 文件不存在或不是普通文件: $1" >&2
+    exit 1
+fi
+
+file="$1"
+filename=$(basename "$file")
+lower=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
+
+# 确定目标目录
+if [ $# -eq 2 ]; then
+    # 使用指定的目标目录
+    target_dir="$2"
+else
+    # 自动创建与压缩包同名的目录
+    # 移除多层扩展名，如 .tar.gz -> 去掉 .tar.gz
+    if echo "$lower" | grep -qE '\.(tar\.bz2|tar\.gz|tar\.xz|tar\.zst|tbz2|tgz|txz)$'; then
+        basename_noext=$(echo "$filename" | sed -E 's/\.(tar\.bz2|tar\.gz|tar\.xz|tar\.zst|tbz2|tgz|txz)$//')
+    else
+        basename_noext="${filename%.*}"
+    fi
+    target_dir="./$basename_noext"
+fi
+
+# 创建目标目录
+mkdir -p "$target_dir"
+
+# 检查必要命令的辅助函数
+check_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        echo "错误: 需要安装 $1" >&2
+        exit 1
+    fi
+}
+
+# 获取文件类型（更可靠的方法）
+filetype=$(file -b "$file" 2>/dev/null)
+
+echo "正在解压到: $target_dir"
+
+case "$lower" in
+    *.tar.bz2|*.tar.gz|*.tar.xz|*.tar.zst|*.tbz2|*.tgz|*.txz|*.tar)
+        tar xf "$file" -C "$target_dir" ;;
+
+    *.bz2)
+        check_command bunzip2
+        cp "$file" "$target_dir/"
+        bunzip2 "$target_dir/$filename" ;;
+
+    *.gz)
+        check_command gunzip
+        cp "$file" "$target_dir/"
+        gunzip "$target_dir/$filename" ;;
+
+    *.rar)
+        if command -v unrar >/dev/null 2>&1; then
+            unrar x "$file" "$target_dir/"
+        elif command -v 7z >/dev/null 2>&1; then
+            7z x "$file" -o"$target_dir"
+        else
+            echo "错误: 需要安装 unrar 或 7z" >&2
+            exit 1
+        fi ;;
+
+    *.zip|*.jar|*.war|*.ear|*.apk|*.ipa)
+        check_command unzip
+        unzip "$file" -d "$target_dir" ;;
+
+    *.Z)
+        check_command uncompress
+        cp "$file" "$target_dir/"
+        uncompress "$target_dir/$filename" ;;
+
+    *.7z)
+        check_command 7z
+        7z x "$file" -o"$target_dir" ;;
+
+    *.xz)
+        check_command unxz
+        cp "$file" "$target_dir/"
+        unxz "$target_dir/$filename" ;;
+
+    *.lzma)
+        check_command unlzma
+        cp "$file" "$target_dir/"
+        unlzma "$target_dir/$filename" ;;
+
+    *.lz4)
+        check_command lz4
+        lz4 -d "$file" "$target_dir/${filename%.lz4}" ;;
+
+    *.zst)
+        check_command unzstd
+        cp "$file" "$target_dir/"
+        unzstd "$target_dir/$filename" ;;
+
+    *.cab)
+        if command -v cabextract >/dev/null 2>&1; then
+            cabextract -d "$target_dir" "$file"
+        elif command -v 7z >/dev/null 2>&1; then
+            7z x "$file" -o"$target_dir"
+        else
+            echo "错误: 需要安装 cabextract 或 7z" >&2
+            exit 1
+        fi ;;
+
+    *.iso)
+        if command -v 7z >/dev/null 2>&1; then
+            7z x "$file" -o"$target_dir"
+        else
+            echo "错误: 需要安装 7z 来解压 ISO 文件" >&2
+            exit 1
+        fi ;;
+
+    *.deb)
+        if command -v dpkg-deb >/dev/null 2>&1; then
+            dpkg-deb -x "$file" "$target_dir/"
+        elif command -v 7z >/dev/null 2>&1; then
+            7z x "$file" -o"$target_dir"
+        else
+            echo "错误: 需要安装 dpkg 或 7z" >&2
+            exit 1
+        fi ;;
+
+    *.rpm)
+        if command -v rpm2cpio >/dev/null 2>&1; then
+            (cd "$target_dir" && rpm2cpio "$(realpath "$file")" | cpio -idmv)
+        elif command -v 7z >/dev/null 2>&1; then
+            7z x "$file" -o"$target_dir"
+        else
+            echo "错误: 需要安装 rpm2cpio 或 7z" >&2
+            exit 1
+        fi ;;
+
+    *)
+        # 尝试通过文件类型识别
+        echo "未知扩展名，尝试通过文件类型识别..." >&2
+        case "$filetype" in
+            *gzip*)
+                echo "检测到 gzip 格式" >&2
+                cp "$file" "$target_dir/${filename}.gz"
+                gunzip "$target_dir/${filename}.gz" ;;
+            *bzip2*)
+                echo "检测到 bzip2 格式" >&2
+                cp "$file" "$target_dir/${filename}.bz2"
+                bunzip2 "$target_dir/${filename}.bz2" ;;
+            *XZ*)
+                echo "检测到 xz 格式" >&2
+                cp "$file" "$target_dir/${filename}.xz"
+                unxz "$target_dir/${filename}.xz" ;;
+            *Zip*)
+                echo "检测到 zip 格式" >&2
+                cp "$file" "$target_dir/${filename}.zip"
+                unzip "$target_dir/${filename}.zip" ;;
+            *7-zip*)
+                echo "检测到 7z 格式" >&2
+                7z x "$file" -o"$target_dir" ;;
+            *)
+                echo "错误: 无法识别的文件格式: $1" >&2
+                echo "文件类型: $filetype" >&2
+                rm -rf "$target_dir"  # 清理空目录
+                exit 1 ;;
+        esac
+        ;;
+esac
+
+# 检查解压是否成功
+if [ $? -eq 0 ]; then
+    echo "成功解压到: $target_dir"
+
+    # 检查目标目录内容，如果只有一个文件夹，可以考虑是否扁平化
+    items_count=$(ls -1 "$target_dir" | wc -l)
+    if [ "$items_count" -eq 1 ] && [ -d "$target_dir/$(ls "$target_dir")" ]; then
+        echo "提示: 解压后只有单个文件夹，如需扁平化结构请手动处理。"
+    fi
+else
+    echo "解压失败" >&2
+    exit 1
+fi

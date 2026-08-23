@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# 描述：创建 .bak 备份
+# 用法：bak <文件...>
+
+
+if [ $# -eq 0 ]; then
+    echo "用法: bak <文件...>" >&2
+    exit 1
+fi
+
+for file in "$@"; do
+    if [ ! -f "$file" ]; then
+        echo "警告: $file 不存在，跳过" >&2
+        continue
+    fi
+    cp "$file" "${file}.bak"
+    echo "已创建: ${file}.bak"
+done

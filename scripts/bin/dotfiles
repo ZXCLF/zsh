@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# 描述：管理 dotfiles Git 仓库
+# 用法：dotfiles <git 命令>
+
+
+if [[ "$1" == "add" ]] && [[ "$2" == "." || "$2" == "-A" || "$2" == "--all" || "$2" == "-u" ]]; then
+    echo "危险操作：'dotfiles add $2' 可能会暂存整个 HOME 目录！" >&2
+    echo "请用具体文件路径，例如：dotfiles add .config/zsh/" >&2
+    exit 1
+fi
+git --git-dir="$HOME/.dotfiles" --work-tree="$HOME" "$@"
