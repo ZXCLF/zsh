@@ -75,7 +75,6 @@ $ZDOTDIR/
 ├── .gitignore                 # 忽略 plugins/、local.zsh、编译文件
 ├── .zshenv                    # 环境变量（所有 Zsh 会话加载）
 ├── .zshrc                     # 交互式 Shell 配置
-├── AGENTS.md                  # 给 AI 助手的操作指南
 ├── README.md
 ├── local.zsh                  # [gitignored] 本地机器覆盖配置
 ├── plugins/                   # [gitignored] 自动克隆的插件
