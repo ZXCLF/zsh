@@ -73,3 +73,11 @@ export PATH="$ZDOTDIR/scripts/bin:$PATH"
 
 # 加载 fnm
 eval "$(fnm env --use-on-cd)"
+
+# ============================================================
+#  加载用户配置
+# ============================================================
+
+if [[ -f "$ZDOTDIR/local.zsh" ]]; then
+  source "$ZDOTDIR/local.zsh"
+fi

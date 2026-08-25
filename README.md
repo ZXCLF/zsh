@@ -21,7 +21,7 @@
 
 ```bash
 paru -S --needed zsh neovim eza bat fd fzf zoxide starship ripgrep yazi \
-  unrar 7zip zstd tree curl git fnm \
+  unrar 7zip zstd tree curl git fnm tmux\
   file ffmpegthumbnailer poppler imagemagick resvg chafa glow mediainfo
 ```
 
@@ -309,14 +309,7 @@ chmod +x scripts/init/50-myconfig.zsh
 `local.zsh` 是 gitignored 的，适合存放每台机器特有的配置：
 
 ```bash
-touch local.zsh
-```
-
-然后在某个 init 脚本中 source 它：
-
-```bash
-# 在 50-local.zsh 中
-[[ -f "$ZDOTDIR/local.zsh" ]] && source "$ZDOTDIR/local.zsh"
+touch local.zsh # zshrc 会自动 source 它
 ```
 
 ### 修改插件配置
