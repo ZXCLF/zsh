@@ -21,7 +21,7 @@
 
 ```bash
 paru -S --needed zsh neovim eza bat fd fzf zoxide starship ripgrep yazi \
-  unrar 7zip zstd tree curl git fnm tmux\
+  unrar 7zip zstd tree curl git fnm tmux pnpm\
   file ffmpegthumbnailer poppler imagemagick resvg chafa glow mediainfo
 ```
 

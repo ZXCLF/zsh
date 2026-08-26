@@ -71,6 +71,11 @@ done
 # 将自定义命令目录加入 PATH
 export PATH="$ZDOTDIR/scripts/bin:$PATH"
 
+# 将 pnpm 的 bin 目录加入 PATH
+export PNPM_HOME="/home/zxclf/.local/share/pnpm"
+export PATH="$PNPM_HOME/bin:$PATH"
+
+
 # 加载 fnm
 eval "$(fnm env --use-on-cd)"
 
